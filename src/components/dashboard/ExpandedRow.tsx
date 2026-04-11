@@ -16,7 +16,7 @@ export function ExpandedRow({
   onNotesChange,
   onDeleteRequest,
 }: ExpandedRowProps) {
-  const [notes, setNotes] = useState(app.notes);
+  const [notes, setNotes] = useState(app.notes ?? "");
   const [saved, setSaved] = useState(false);
 
   const handleSaveNotes = () => {

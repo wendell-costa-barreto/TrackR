@@ -13,8 +13,9 @@ export interface Application {
   status: Status;
   salary: string;
   applied: string;  // formatted display string e.g. "Mar 28"
-  logo: string;
-  notes: string;
+logo: string | null;
+notes: string | null;
+
 }
 
 export const STATUS_OPTIONS: Status[] = [

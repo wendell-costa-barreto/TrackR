@@ -11,11 +11,11 @@ export interface TrashedApp {
   salary: string;
   status: Status;
   applied: string;
-  notes: string;
+  notes: string | null;  // ← was `string`, must match Application
+  logo?: string | null;  // ← add this so it can round-trip with Application
   url?: string;
-  deletedAt: number; // unix ms
+  deletedAt: number;
 }
-
 function loadTrash(): TrashedApp[] {
   try {
     const raw = localStorage.getItem(TRASH_KEY);
@@ -32,24 +32,26 @@ function loadTrash(): TrashedApp[] {
 function saveTrash(items: TrashedApp[]) {
   try {
     localStorage.setItem(TRASH_KEY, JSON.stringify(items));
-  } catch {}
+  } catch {
+    // Ignore
+  }
 }
 
 export function useTrash() {
-  const [trash, setTrash] = useState<TrashedApp[]>(loadTrash);
+// When initializing state, filter immediately:
+const [trash, setTrash] = useState<TrashedApp[]>(() => {
+  const saved = loadTrash();
+  const now = Date.now();
+  return saved.filter((a) => now - a.deletedAt < SEVEN_DAYS_MS);
+});
 
+// Remove the useEffect that calls setTrash on mount entirely
   // Persist on every change
   useEffect(() => {
     saveTrash(trash);
   }, [trash]);
 
   // Auto-purge stale items on mount
-  useEffect(() => {
-    setTrash((t) => {
-      const now = Date.now();
-      return t.filter((a) => now - a.deletedAt < SEVEN_DAYS_MS);
-    });
-  }, []);
 
   const moveToTrash = useCallback(
     (app: Omit<TrashedApp, "deletedAt">) => {

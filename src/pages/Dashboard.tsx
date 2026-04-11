@@ -365,7 +365,17 @@ export default function Dashboard() {
     async (id: string) => {
       const app = restoreFromTrash(id);
       if (!app) return;
-      const { deletedAt, ...appData } = app;
+      const appData = {
+        id: app.id,
+        company: app.company,
+        role: app.role,
+        salary: app.salary,
+        status: app.status,
+        applied: app.applied,
+        notes: app.notes,
+        url: app.url,
+        logo: null,
+      };
       const restored = await addApp(appData);
       if (restored) history.pushAction({ type: "ADD", app: restored });
     },
@@ -431,7 +441,11 @@ export default function Dashboard() {
   const toggleSelect = (id: string) => {
     setSelectedIds((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) {
+        n.delete(id);
+      } else {
+        n.add(id);
+      }
       return n;
     });
   };

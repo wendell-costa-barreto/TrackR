@@ -11,8 +11,8 @@ function rowToApp(row: {
   status: string;
   salary: string | null;
   applied_at: string;
-  logo: string | null;
-  notes: string | null;
+logo: string | null;
+notes: string | null;
 }): Application {
   return {
     id: row.id,

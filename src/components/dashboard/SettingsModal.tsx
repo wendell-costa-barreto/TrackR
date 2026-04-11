@@ -75,10 +75,11 @@ export function SettingsModal({
       if (error) throw error;
       onProfileUpdate(fullName.trim());
       setProfileMsg({ type: "ok", text: "Profile updated successfully." });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       setProfileMsg({
         type: "err",
-        text: err.message ?? "Something went wrong.",
+        text: message ?? "Something went wrong.",
       });
     } finally {
       setProfileSaving(false);
@@ -98,8 +99,9 @@ export function SettingsModal({
       if (error) throw error;
       setStep("change");
       setSecurityMsg(null);
-    } catch (err: any) {
-      setSecurityMsg({ type: "err", text: "Current password is incorrect." });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(message);
     } finally {
       setSecuritySaving(false);
     }
@@ -130,10 +132,12 @@ export function SettingsModal({
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
       setSecurityMsg({
         type: "err",
-        text: err.message ?? "Something went wrong.",
+        text: message ?? "Something went wrong.",
       });
     } finally {
       setSecuritySaving(false);

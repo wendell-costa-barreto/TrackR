@@ -8,8 +8,9 @@ export interface AppSnapshot {
   salary: string;
   status: Status;
   applied: string;
-  notes: string;
   url?: string;
+  notes: string | null;   // ← must match Application
+  logo: string | null;    // ← required, not optional (no `?`)
 }
 
 export type HistoryAction =

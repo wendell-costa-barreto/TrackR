@@ -21,7 +21,6 @@ export function ApplicationsTable({
   onStatusChange,
   onNotesChange,
   onDelete,
-  total,
   skipConfirm,
   onSkipConfirmChange,
   selectedIds,
@@ -107,7 +106,7 @@ export function ApplicationsTable({
                     className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer active:opacity-70"
                     onClick={() => handleRowClick(app.id)}
                   >
-                    <LogoChip letter={app.logo} />
+                    <LogoChip letter={app.company?.[0] ?? "?"} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">
                         {app.company}
@@ -168,7 +167,7 @@ export function ApplicationsTable({
                     className="flex items-center gap-3 min-w-0 cursor-pointer"
                     onClick={() => handleRowClick(app.id)}
                   >
-                    <LogoChip letter={app.logo} />
+                    <LogoChip letter={app.company?.[0] ?? "?"} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white truncate">
                         {app.company}
