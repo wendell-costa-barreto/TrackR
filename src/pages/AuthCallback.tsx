@@ -7,18 +7,20 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Supabase JS v2 automatically reads the `code` param from the URL
-        // and exchanges it for a session via PKCE.
-        const { error } = await supabase.auth.exchangeCodeForSession(
-          window.location.href,
-        );
+        const code = new URL(window.location.href).searchParams.get("code");
+
+        if (!code) {
+          setError("Missing authentication code.");
+          return;
+        }
+
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
 
         if (error) {
           setError(error.message);
           return;
         }
 
-        // Redirect to the dashboard (or wherever you want post-login)
         window.location.replace("/dashboard");
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Authentication failed.");

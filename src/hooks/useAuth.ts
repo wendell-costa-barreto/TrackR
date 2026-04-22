@@ -166,13 +166,6 @@ export function useAuth(): AuthState & AuthActions {
     setHasMfa(true);
   };
 
-  /**
-   * Kick off a Google OAuth redirect.
-   * Supabase handles the callback; onAuthStateChange fires when it returns.
-   *
-   * Security note: PKCE is enabled by default in Supabase JS v2, so the
-   * redirect is protected against CSRF and token interception.
-   */
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
