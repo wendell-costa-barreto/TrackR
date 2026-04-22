@@ -182,12 +182,13 @@ export function useAuth(): AuthState & AuthActions {
     if (error) throw error;
   };
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setMfaPending(false);
-    setHasMfa(false);
-  };
+const signOut = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+  setMfaPending(false);
+  setHasMfa(false);
+  window.location.replace("/auth");
+};
 
   // ── MFA enrollment helpers ──────────────────────────────────────────────
 
