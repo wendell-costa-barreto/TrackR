@@ -1,21 +1,32 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../../lib/supabase";
+import type { Currency } from "../../hooks/useAuth";
+import { CURRENCY_META, useAuth } from "../../hooks/useAuth";
 import type { TrashedApp } from "../../hooks/useTrash";
+// ── Types ──────────────────────────────────────────────────────────────────
 
-interface SettingsModalProps {
+interface Props {
   user: User;
   skipConfirm: boolean;
-  onSkipConfirmChange: (val: boolean) => void;
+  onSkipConfirmChange: (v: boolean) => void;
   onClose: () => void;
-  onProfileUpdate: (fullName: string) => void;
+  onProfileUpdate: (name: string) => void;
   trash: TrashedApp[];
   onRestore: (id: string) => void;
   onPermanentDelete: (id: string) => void;
   onEmptyTrash: () => void;
+  // ── New props ──
+  currency: Currency;
+  onCurrencyChange: (c: Currency) => void;
+  hasMfa: boolean;
+  onEnrollTotp: () => Promise<{ qrUri: string; secret: string }>;
+  onUnenrollTotp: () => Promise<void>;
 }
 
-type Tab = "profile" | "security" | "preferences" | "trash";
+type Section = "profile" | "security" | "preferences" | "trash";
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 export function SettingsModal({
   user,
@@ -27,520 +38,474 @@ export function SettingsModal({
   onRestore,
   onPermanentDelete,
   onEmptyTrash,
-}: SettingsModalProps) {
-  const [tab, setTab] = useState<Tab>("profile");
+  currency,
+  onCurrencyChange,
+  hasMfa,
+  onEnrollTotp,
+  onUnenrollTotp,
+}: Props) {
+  const [section, setSection] = useState<Section>("profile");
 
-  // ── Profile state ──
-  const [fullName, setFullName] = useState(
+  // Profile
+  const [displayName, setDisplayName] = useState(
     (user.user_metadata?.full_name as string) ?? "",
   );
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileMsg, setProfileMsg] = useState<{
-    type: "ok" | "err";
-    text: string;
-  } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
-  // ── Security state ──
-  const [step, setStep] = useState<"verify" | "change">("verify");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [securitySaving, setSecuritySaving] = useState(false);
-  const [securityMsg, setSecurityMsg] = useState<{
-    type: "ok" | "err";
-    text: string;
-  } | null>(null);
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  // MFA
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [enrollStep, setEnrollStep] = useState<"idle" | "scan" | "confirm">(
+    "idle",
+  );
+  const [qrUri, setQrUri] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const { confirmTotpEnrollment } = useAuth();
 
-  // ── Trash confirm state ──
-  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
-
-  // ── Backdrop click ──
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const handleBackdrop = (e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) onClose();
-  };
-
-  // ── Save profile ──
-  const handleSaveProfile = async () => {
-    if (!fullName.trim()) return;
-    setProfileSaving(true);
+  // ── Profile save ────────────────────────────────────────────────────────
+  const saveProfile = async () => {
+    setSaving(true);
     setProfileMsg(null);
     try {
       const { error } = await supabase.auth.updateUser({
-        data: { full_name: fullName.trim() },
+        data: { full_name: displayName },
       });
       if (error) throw error;
-      onProfileUpdate(fullName.trim());
-      setProfileMsg({ type: "ok", text: "Profile updated successfully." });
+      onProfileUpdate(displayName);
+      setProfileMsg("Saved!");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setProfileMsg({
-        type: "err",
-        text: message ?? "Something went wrong.",
-      });
+      setProfileMsg(err instanceof Error ? err.message : "Save failed.");
     } finally {
-      setProfileSaving(false);
+      setSaving(false);
     }
   };
 
-  // ── Verify current password then unlock change form ──
-  const handleVerify = async () => {
-    if (!currentPassword) return;
-    setSecuritySaving(true);
-    setSecurityMsg(null);
+  // ── MFA enrollment flow ─────────────────────────────────────────────────
+  const startEnroll = async () => {
+    setMfaBusy(true);
+    setMfaError(null);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: user.email!,
-        password: currentPassword,
+      // We need the raw factorId from the enroll call — call supabase directly
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        issuer: "TrackR",
+        friendlyName: "Authenticator App",
       });
       if (error) throw error;
-      setStep("change");
-      setSecurityMsg(null);
+      setQrUri(data.totp.qr_code);
+      setSecret(data.totp.secret);
+      setFactorId(data.id);
+      setEnrollStep("scan");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.log(message);
+      setMfaError(
+        err instanceof Error ? err.message : "Failed to start enrollment.",
+      );
     } finally {
-      setSecuritySaving(false);
+      setMfaBusy(false);
     }
   };
 
-  // ── Save new password ──
-  const handleChangePassword = async () => {
-    if (newPassword !== confirmPassword) {
-      setSecurityMsg({ type: "err", text: "Passwords don't match." });
-      return;
-    }
-    if (newPassword.length < 8) {
-      setSecurityMsg({
-        type: "err",
-        text: "Password must be at least 8 characters.",
-      });
-      return;
-    }
-    setSecuritySaving(true);
-    setSecurityMsg(null);
+  const confirmEnroll = async () => {
+    if (!factorId) return;
+    setMfaBusy(true);
+    setMfaError(null);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) throw error;
-      setSecurityMsg({ type: "ok", text: "Password changed successfully." });
-      setStep("verify");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
+      await confirmTotpEnrollment(factorId, totpCode.replace(/\s/g, ""));
+      setEnrollStep("idle");
+      setTotpCode("");
+      setQrUri(null);
+      setSecret(null);
+      setFactorId(null);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      setSecurityMsg({
-        type: "err",
-        text: message ?? "Something went wrong.",
-      });
+      setMfaError(
+        err instanceof Error ? err.message : "Invalid code — try again.",
+      );
     } finally {
-      setSecuritySaving(false);
+      setMfaBusy(false);
     }
   };
 
-  // ── Toggle delete confirmation preference ──
-  const handleToggleConfirm = async (val: boolean) => {
-    onSkipConfirmChange(val);
-    await supabase.auth.updateUser({ data: { skip_confirm: val } });
+  const handleUnenroll = async () => {
+    if (
+      !window.confirm(
+        "Disable two-factor authentication? Your account will be less secure.",
+      )
+    )
+      return;
+    setMfaBusy(true);
+    setMfaError(null);
+    try {
+      await onUnenrollTotp();
+    } catch (err: unknown) {
+      setMfaError(
+        err instanceof Error ? err.message : "Failed to disable 2FA.",
+      );
+    } finally {
+      setMfaBusy(false);
+    }
   };
 
-  // ── Trash helpers ──
-  const daysLeft = (deletedAt: number) => {
-    const ms = 7 * 24 * 60 * 60 * 1000 - (Date.now() - deletedAt);
-    const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
-    return Math.max(1, days);
-  };
-
-  const formatDate = (deletedAt: number) =>
-    new Date(deletedAt).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-
-  const TABS: { key: Tab; label: string }[] = [
-    { key: "profile", label: "Profile" },
-    { key: "security", label: "Security" },
-    { key: "preferences", label: "Preferences" },
+  // ── Nav tabs ────────────────────────────────────────────────────────────
+  const tabs: { id: Section; label: string; icon: string }[] = [
+    { id: "profile", label: "Profile", icon: "👤" },
+    { id: "security", label: "Security", icon: "🔒" },
+    { id: "preferences", label: "Preferences", icon: "⚙️" },
     {
-      key: "trash",
-      label: `Trash${trash.length > 0 ? ` (${trash.length})` : ""}`,
+      id: "trash",
+      label: `Trash${trash.length ? ` (${trash.length})` : ""}`,
+      icon: "🗑️",
     },
   ];
 
   return (
-    <div
-      ref={backdropRef}
-      onClick={handleBackdrop}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-    >
-      <div className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/80 animate-scale-in overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-zinc-800/60">
-          <h2 className="text-base font-bold text-white tracking-tight">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/60 flex overflow-hidden max-h-[90vh]">
+        {/* ── Sidebar nav ── */}
+        <div className="w-44 flex-shrink-0 border-r border-zinc-800 p-3 flex flex-col gap-0.5">
+          <p className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider px-2 py-1 mb-1">
             Settings
-          </h2>
+          </p>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setSection(t.id)}
+              className={`text-left text-xs px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                section === t.id
+                  ? "bg-zinc-800 text-white font-semibold"
+                  : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
+              }`}
+            >
+              <span>{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+          <div className="flex-1" />
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="text-xs text-zinc-600 hover:text-zinc-400 px-3 py-2 rounded-lg hover:bg-zinc-800/50 transition-colors text-left"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            ✕ Close
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 px-6 pt-4 flex-wrap">
-          {TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`text-xs font-semibold px-4 py-2 rounded-lg transition-colors ${
-                tab === key
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="px-6 py-6 min-h-[280px]">
-          {/* ── Profile Tab ── */}
-          {tab === "profile" && (
-            <div className="flex flex-col gap-5 animate-fade-in">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => {
-                    setFullName(e.target.value);
-                    setProfileMsg(null);
-                  }}
-                  className="bg-zinc-900 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-600 rounded-lg px-4 py-2.5 focus:outline-none focus:border-zinc-600 transition-colors"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                  Email
-                </label>
-                <input
-                  type="text"
-                  value={user.email ?? ""}
-                  disabled
-                  className="bg-zinc-900/50 border border-zinc-800/50 text-sm text-zinc-600 rounded-lg px-4 py-2.5 cursor-not-allowed select-none"
-                />
-                <p className="text-[11px] text-zinc-700">
-                  Email changes aren't supported yet.
-                </p>
-              </div>
-
-              {profileMsg && (
-                <p
-                  className={`text-xs font-medium ${profileMsg.type === "ok" ? "text-emerald-500" : "text-red-400"}`}
-                >
-                  {profileMsg.type === "ok" ? "✓ " : "✕ "}
-                  {profileMsg.text}
-                </p>
-              )}
-
-              <button
-                onClick={handleSaveProfile}
-                disabled={
-                  profileSaving ||
-                  !fullName.trim() ||
-                  fullName.trim() === (user.user_metadata?.full_name ?? "")
-                }
-                className="self-end text-xs font-semibold px-5 py-2.5 rounded-lg bg-white text-zinc-950 hover:bg-zinc-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                {profileSaving ? "Saving…" : "Save changes"}
-              </button>
-            </div>
-          )}
-
-          {/* ── Security Tab ── */}
-          {tab === "security" && (
-            <div className="flex flex-col gap-5 animate-fade-in">
-              {step === "verify" ? (
-                <>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
-                    To change your password, first confirm your current one.
+        {/* ── Content ── */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* ── Profile ── */}
+          {section === "profile" && (
+            <div className="space-y-5">
+              <h2 className="text-base font-bold text-white">Profile</h2>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400 font-medium">
+                    Display name
+                  </label>
+                  <input
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-sm text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-zinc-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400 font-medium">
+                    Email
+                  </label>
+                  <input
+                    value={user.email ?? ""}
+                    disabled
+                    className="w-full bg-zinc-800/50 border border-zinc-800 text-sm text-zinc-500 rounded-xl px-3 py-2.5 cursor-not-allowed"
+                  />
+                  <p className="text-[11px] text-zinc-600">
+                    Email cannot be changed here.
                   </p>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                      Current Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showCurrent ? "text" : "password"}
-                        value={currentPassword}
-                        onChange={(e) => {
-                          setCurrentPassword(e.target.value);
-                          setSecurityMsg(null);
-                        }}
-                        onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                        placeholder="••••••••"
-                        className="w-full bg-zinc-900 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-600 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:border-zinc-600 transition-colors"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowCurrent((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
-                      >
-                        <EyeIcon open={showCurrent} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {securityMsg && (
-                    <p
-                      className={`text-xs font-medium ${securityMsg.type === "ok" ? "text-emerald-500" : "text-red-400"}`}
-                    >
-                      {securityMsg.type === "ok" ? "✓ " : "✕ "}
-                      {securityMsg.text}
-                    </p>
-                  )}
-
-                  <button
-                    onClick={handleVerify}
-                    disabled={securitySaving || !currentPassword}
-                    className="self-end text-xs font-semibold px-5 py-2.5 rounded-lg bg-white text-zinc-950 hover:bg-zinc-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                </div>
+                {profileMsg && (
+                  <p
+                    className={`text-xs ${profileMsg === "Saved!" ? "text-green-400" : "text-red-400"}`}
                   >
-                    {securitySaving ? "Verifying…" : "Continue"}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs text-emerald-500 font-medium">
-                    ✓ Identity confirmed. Set your new password.
+                    {profileMsg}
                   </p>
-
-                  {(
-                    [
-                      {
-                        label: "New Password",
-                        value: newPassword,
-                        setter: setNewPassword,
-                        show: showNew,
-                        toggle: () => setShowNew((v) => !v),
-                      },
-                      {
-                        label: "Confirm New Password",
-                        value: confirmPassword,
-                        setter: setConfirmPassword,
-                        show: showConfirm,
-                        toggle: () => setShowConfirm((v) => !v),
-                      },
-                    ] as const
-                  ).map(({ label, value, setter, show, toggle }) => (
-                    <div key={label} className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                        {label}
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={show ? "text" : "password"}
-                          value={value}
-                          onChange={(e) => {
-                            setter(e.target.value);
-                            setSecurityMsg(null);
-                          }}
-                          placeholder="••••••••"
-                          className="w-full bg-zinc-900 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-600 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:border-zinc-600 transition-colors"
-                        />
-                        <button
-                          type="button"
-                          onClick={toggle}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
-                        >
-                          <EyeIcon open={show} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {securityMsg && (
-                    <p
-                      className={`text-xs font-medium ${securityMsg.type === "ok" ? "text-emerald-500" : "text-red-400"}`}
-                    >
-                      {securityMsg.type === "ok" ? "✓ " : "✕ "}
-                      {securityMsg.text}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-3 self-end">
-                    <button
-                      onClick={() => {
-                        setStep("verify");
-                        setSecurityMsg(null);
-                      }}
-                      className="text-xs font-semibold px-4 py-2.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={handleChangePassword}
-                      disabled={
-                        securitySaving || !newPassword || !confirmPassword
-                      }
-                      className="text-xs font-semibold px-5 py-2.5 rounded-lg bg-white text-zinc-950 hover:bg-zinc-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      {securitySaving ? "Saving…" : "Change password"}
-                    </button>
-                  </div>
-                </>
-              )}
+                )}
+                <button
+                  onClick={saveProfile}
+                  disabled={saving}
+                  className="bg-white text-zinc-950 text-xs font-semibold px-4 py-2 rounded-lg hover:bg-zinc-100 transition-colors disabled:opacity-40"
+                >
+                  {saving ? "Saving…" : "Save changes"}
+                </button>
+              </div>
             </div>
           )}
 
-          {/* ── Preferences Tab ── */}
-          {tab === "preferences" && (
-            <div className="flex flex-col gap-6 animate-fade-in">
-              <div className="flex items-start justify-between gap-6">
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-semibold text-zinc-200">
-                    Skip delete confirmation
-                  </span>
-                  <span className="text-xs text-zinc-600 leading-relaxed max-w-xs">
-                    When enabled, deleting an application won't ask for
-                    confirmation. Turn this off to re-enable the safety prompt.
+          {/* ── Security (2FA) ── */}
+          {section === "security" && (
+            <div className="space-y-5">
+              <h2 className="text-base font-bold text-white">Security</h2>
+
+              <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      Authenticator App (TOTP)
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {hasMfa
+                        ? "Two-factor authentication is enabled. Your account is protected."
+                        : "Add an extra layer of security using an app like Google Authenticator or 1Password."}
+                    </p>
+                  </div>
+                  <span
+                    className={`flex-shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                      hasMfa
+                        ? "text-green-400 border-green-800 bg-green-950/40"
+                        : "text-zinc-500 border-zinc-700 bg-zinc-800"
+                    }`}
+                  >
+                    {hasMfa ? "ON" : "OFF"}
                   </span>
                 </div>
+
+                {mfaError && (
+                  <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/40 rounded-lg px-3 py-2">
+                    {mfaError}
+                  </p>
+                )}
+
+                {/* Already enrolled */}
+                {hasMfa && (
+                  <button
+                    onClick={handleUnenroll}
+                    disabled={mfaBusy}
+                    className="text-xs font-semibold text-red-400 hover:text-red-300 border border-red-900/40 hover:border-red-800/60 bg-red-950/20 px-4 py-2 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    {mfaBusy ? "Disabling…" : "Disable 2FA"}
+                  </button>
+                )}
+
+                {/* Not enrolled — idle state */}
+                {!hasMfa && enrollStep === "idle" && (
+                  <button
+                    onClick={startEnroll}
+                    disabled={mfaBusy}
+                    className="text-xs font-semibold bg-white text-zinc-950 hover:bg-zinc-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    {mfaBusy ? "Loading…" : "Enable 2FA"}
+                  </button>
+                )}
+
+                {/* Step 1: Scan QR */}
+                {!hasMfa && enrollStep === "scan" && qrUri && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-zinc-400">
+                      Scan this QR code with your authenticator app (Google
+                      Authenticator, Authy, 1Password, etc.):
+                    </p>
+                    <div className="flex justify-center">
+                      {/* Supabase returns a data URI — drop it straight into <img> */}
+                      <img
+                        src={qrUri}
+                        alt="TOTP QR code"
+                        className="w-40 h-40 rounded-lg border-4 border-white"
+                      />
+                    </div>
+                    {secret && (
+                      <div className="bg-zinc-800 rounded-lg px-3 py-2 text-center">
+                        <p className="text-[11px] text-zinc-500 mb-1">
+                          Manual entry key:
+                        </p>
+                        <code className="text-xs text-zinc-300 tracking-wider break-all">
+                          {secret}
+                        </code>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setEnrollStep("confirm")}
+                      className="w-full text-xs font-semibold bg-white text-zinc-950 hover:bg-zinc-100 py-2 rounded-lg transition-colors"
+                    >
+                      I've scanned it →
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEnrollStep("idle");
+                        setQrUri(null);
+                        setSecret(null);
+                        setFactorId(null);
+                      }}
+                      className="w-full text-xs text-zinc-600 hover:text-zinc-400 py-1.5 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {/* Step 2: Confirm with first code */}
+                {!hasMfa && enrollStep === "confirm" && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-zinc-400">
+                      Enter the 6-digit code shown in your authenticator app to
+                      verify setup:
+                    </p>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={7}
+                      placeholder="123 456"
+                      value={totpCode}
+                      autoFocus
+                      onChange={(e) => {
+                        const raw = e.target.value
+                          .replace(/[^\d]/g, "")
+                          .slice(0, 6);
+                        setTotpCode(
+                          raw.length > 3
+                            ? `${raw.slice(0, 3)} ${raw.slice(3)}`
+                            : raw,
+                        );
+                      }}
+                      className="w-full bg-zinc-800 border border-zinc-700 text-white text-center tracking-[0.4em] text-lg font-mono rounded-xl px-4 py-2.5 focus:outline-none focus:border-zinc-500 transition-colors"
+                    />
+                    <button
+                      onClick={confirmEnroll}
+                      disabled={
+                        mfaBusy || totpCode.replace(/\s/g, "").length < 6
+                      }
+                      className="w-full text-xs font-semibold bg-white text-zinc-950 hover:bg-zinc-100 py-2 rounded-lg transition-colors disabled:opacity-40"
+                    >
+                      {mfaBusy ? "Verifying…" : "Confirm & enable 2FA"}
+                    </button>
+                    <button
+                      onClick={() => setEnrollStep("scan")}
+                      className="w-full text-xs text-zinc-600 hover:text-zinc-400 py-1.5 transition-colors"
+                    >
+                      ← Back to QR
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Preferences (currency + delete confirm) ── */}
+          {section === "preferences" && (
+            <div className="space-y-5">
+              <h2 className="text-base font-bold text-white">Preferences</h2>
+
+              {/* Currency picker */}
+              <div className="space-y-2">
+                <label className="text-xs text-zinc-400 font-medium block">
+                  Salary currency
+                </label>
+                <p className="text-[11px] text-zinc-600">
+                  All salary figures will display using this currency symbol.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    Object.entries(CURRENCY_META) as [
+                      Currency,
+                      (typeof CURRENCY_META)[Currency],
+                    ][]
+                  ).map(([code, { symbol, label, flag }]) => (
+                    <button
+                      key={code}
+                      onClick={() => onCurrencyChange(code)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-colors ${
+                        currency === code
+                          ? "border-zinc-500 bg-zinc-800 text-white"
+                          : "border-zinc-800 bg-zinc-800/30 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                      }`}
+                    >
+                      <span className="text-base">{flag}</span>
+                      <div>
+                        <p className="text-xs font-semibold">{code}</p>
+                        <p className="text-[10px] text-zinc-500">{symbol}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Delete confirm toggle */}
+              <div className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-xs font-semibold text-white">
+                    Skip delete confirmation
+                  </p>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    Delete applications without a confirmation prompt.
+                  </p>
+                </div>
                 <button
-                  onClick={() => handleToggleConfirm(!skipConfirm)}
-                  className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none ${skipConfirm ? "bg-white" : "bg-zinc-700"}`}
+                  onClick={() => onSkipConfirmChange(!skipConfirm)}
+                  className={`w-10 h-6 rounded-full border transition-colors relative ${
+                    skipConfirm
+                      ? "bg-white border-white"
+                      : "bg-zinc-800 border-zinc-700"
+                  }`}
                 >
                   <span
-                    className={`absolute top-1 left-1 w-4 h-4 rounded-full transition-transform duration-200 ${skipConfirm ? "translate-x-4 bg-zinc-950" : "translate-x-0 bg-zinc-400"}`}
+                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-zinc-900 transition-transform ${
+                      skipConfirm ? "translate-x-4" : "translate-x-0.5"
+                    }`}
                   />
                 </button>
               </div>
-
-              <div className="h-px bg-zinc-800/60" />
-              <p className="text-[11px] text-zinc-700 leading-relaxed">
-                More preferences coming soon.
-              </p>
             </div>
           )}
 
-          {/* ── Trash Tab ── */}
-          {tab === "trash" && (
-            <div className="flex flex-col gap-4 animate-fade-in">
+          {/* ── Trash ── */}
+          {section === "trash" && (
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-zinc-500 leading-relaxed">
-                  Deleted applications are kept for{" "}
-                  <span className="text-zinc-300 font-semibold">7 days</span>{" "}
-                  before being permanently removed.
-                </p>
+                <h2 className="text-base font-bold text-white">
+                  Trash
+                  {trash.length > 0 && (
+                    <span className="ml-2 text-xs font-normal text-zinc-500">
+                      {trash.length} item{trash.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </h2>
                 {trash.length > 0 && (
-                  <div className="flex-shrink-0 ml-4">
-                    {confirmEmptyTrash ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-zinc-500">Sure?</span>
-                        <button
-                          onClick={() => {
-                            onEmptyTrash();
-                            setConfirmEmptyTrash(false);
-                          }}
-                          className="text-[11px] font-semibold text-red-400 hover:text-red-300 px-2 py-1 rounded-md hover:bg-zinc-800 transition-colors"
-                        >
-                          Yes, empty
-                        </button>
-                        <button
-                          onClick={() => setConfirmEmptyTrash(false)}
-                          className="text-[11px] text-zinc-600 hover:text-zinc-400 px-2 py-1 rounded-md hover:bg-zinc-800 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmEmptyTrash(true)}
-                        className="text-[11px] font-semibold text-zinc-600 hover:text-red-400 px-3 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
-                      >
-                        Empty trash
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    onClick={onEmptyTrash}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Empty trash
+                  </button>
                 )}
               </div>
 
               {trash.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 gap-2 text-zinc-700">
-                  <svg
-                    className="w-8 h-8 mb-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                  <span className="text-xs">Trash is empty</span>
+                <div className="text-center py-12 text-zinc-700 space-y-1">
+                  <p className="text-2xl">🗑️</p>
+                  <p className="text-sm">Trash is empty</p>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="space-y-2">
                   {trash.map((app) => (
                     <div
                       key={app.id}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800/60 group"
+                      className="flex items-center justify-between gap-3 bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-3"
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-zinc-200 truncate">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">
                           {app.company}
                         </p>
-                        <p className="text-[11px] text-zinc-600 truncate">
+                        <p className="text-xs text-zinc-500 truncate">
                           {app.role}
                         </p>
                       </div>
-                      <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                        <span className="text-[10px] text-zinc-700">
-                          deleted {formatDate(app.deletedAt)}
-                        </span>
-                        <span
-                          className={`text-[10px] font-semibold ${daysLeft(app.deletedAt) <= 1 ? "text-red-500" : "text-zinc-600"}`}
-                        >
-                          {daysLeft(app.deletedAt)}d left
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => onRestore(app.id)}
-                          title="Restore"
-                          className="text-[11px] font-semibold text-emerald-500 hover:text-emerald-400 px-2 py-1 rounded-md hover:bg-zinc-800 transition-colors"
+                          className="text-xs text-zinc-400 hover:text-white transition-colors"
                         >
                           Restore
                         </button>
                         <button
                           onClick={() => onPermanentDelete(app.id)}
-                          title="Delete permanently"
-                          className="text-[11px] text-zinc-700 hover:text-red-400 px-2 py-1 rounded-md hover:bg-zinc-800 transition-colors"
+                          className="text-xs text-red-500 hover:text-red-400 transition-colors"
                         >
                           Delete
                         </button>
@@ -549,53 +514,10 @@ export function SettingsModal({
                   ))}
                 </div>
               )}
-
-              <p className="text-[11px] text-zinc-700 mt-1">
-                Restoring an application moves it back to your main list with
-                its original status.
-              </p>
             </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-function EyeIcon({ open }: { open: boolean }) {
-  return open ? (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-      />
-    </svg>
-  ) : (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-      />
-    </svg>
   );
 }

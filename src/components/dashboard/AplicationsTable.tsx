@@ -14,6 +14,8 @@ interface ApplicationsTableProps {
   onSkipConfirmChange: (val: boolean) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  currencySymbol: string;
+  currencyFlag: string;
 }
 
 export function ApplicationsTable({

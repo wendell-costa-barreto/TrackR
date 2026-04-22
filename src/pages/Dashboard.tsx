@@ -8,7 +8,7 @@ import { SettingsModal } from "../components/dashboard/SettingsModal";
 import { TourOverlay } from "../components/dashboard/TourOverlay";
 import type { TourStep } from "../components/dashboard/TourOverlay";
 import { useApplications } from "../hooks/useApplications";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, CURRENCY_META } from "../hooks/useAuth";
 import { useTour } from "../hooks/useTour";
 import {
   useHistory,
@@ -87,7 +87,15 @@ const TOUR_STEPS: TourStep[] = [
 ];
 
 export default function Dashboard() {
-  const { user, signOut } = useAuth();
+  const {
+    user,
+    signOut,
+    currency,
+    setCurrency,
+    hasMfa,
+    enrollTotp,
+    unenrollTotp,
+  } = useAuth();
   const { apps, loading, error, addApp, changeStatus, changeNotes, removeApp } =
     useApplications();
 
@@ -126,9 +134,9 @@ export default function Dashboard() {
   const [bulkNoteOpen, setBulkNoteOpen] = useState(false);
   const [bulkNoteValue, setBulkNoteValue] = useState("");
 
-  // ── Guard: true while an undo/redo mutation is in flight ──
-  // Wrapped handlers check this synchronously at entry and bail out immediately,
-  // so they never push a duplicate history entry for an undo/redo operation.
+  const currencySymbol = CURRENCY_META[currency].symbol;
+  const currencyFlag = CURRENCY_META[currency].flag;
+
   const isUndoRedoing = useRef(false);
 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -502,6 +510,13 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-1.5 ml-auto">
+          <button
+            onClick={() => setShowSettings(true)}
+            title={`Currency: ${CURRENCY_META[currency].label}`}
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-zinc-800 text-base hover:border-zinc-700 transition-colors"
+          >
+            * {currencyFlag}
+          </button>
           {/* Undo */}
           <button
             data-tour="undo-btn"
@@ -689,7 +704,6 @@ export default function Dashboard() {
           </div>
         </div>
       </nav>
-
       {/* ── Stat cards ── */}
       <div
         data-tour="stat-cards"
@@ -700,7 +714,6 @@ export default function Dashboard() {
         <StatCard value={stats.interviews} label="Interviews" />
         <StatCard value={stats.offers} label="Offers" accent />
       </div>
-
       {/* ── Main content ── */}
       <div className="flex" style={{ minHeight: "calc(100vh - 56px - 80px)" }}>
         <div className="flex-1 flex flex-col min-w-0">
@@ -969,6 +982,8 @@ export default function Dashboard() {
               onSkipConfirmChange={setSkipConfirm}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
+              currencySymbol={currencySymbol}
+              currencyFlag={currencyFlag}
             />
           )}
 
@@ -985,7 +1000,6 @@ export default function Dashboard() {
           <Sidebar applications={apps} />
         </div>
       </div>
-
       {/* ── Mobile sidebar drawer ── */}
       {showSidebar && (
         <div className="fixed inset-0 z-50 flex justify-end lg:hidden">
@@ -1024,7 +1038,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
       {/* ── Modals ── */}
       {showAddModal && (
         <AddApplicationModal
@@ -1032,6 +1045,7 @@ export default function Dashboard() {
           onClose={() => setShowAddModal(false)}
         />
       )}
+      *{" "}
       {showSettings && user && (
         <SettingsModal
           user={user}
@@ -1043,9 +1057,13 @@ export default function Dashboard() {
           onRestore={handleRestore}
           onPermanentDelete={permanentlyDelete}
           onEmptyTrash={emptyTrash}
+          currency={currency}
+          onCurrencyChange={setCurrency}
+          hasMfa={hasMfa}
+          onEnrollTotp={enrollTotp}
+          onUnenrollTotp={unenrollTotp}
         />
       )}
-
       {/* ── Tour ── */}
       {tour.active && (
         <TourOverlay
