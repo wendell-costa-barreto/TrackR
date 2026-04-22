@@ -41,7 +41,6 @@ export function SettingsModal({
   currency,
   onCurrencyChange,
   hasMfa,
-  onEnrollTotp,
   onUnenrollTotp,
 }: Props) {
   const [section, setSection] = useState<Section>("profile");
@@ -406,7 +405,7 @@ export function SettingsModal({
                       Currency,
                       (typeof CURRENCY_META)[Currency],
                     ][]
-                  ).map(([code, { symbol, label, flag }]) => (
+                  ).map(([code, { symbol, flag }]) => (
                     <button
                       key={code}
                       onClick={() => onCurrencyChange(code)}
