@@ -6,7 +6,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 
-A full-stack, single-page web app for managing your job search pipeline — with real-time stats, bulk actions, undo/redo history, multi-currency salary display, and secure authentication. Free to self-host.
+A full-stack, single-page web app for managing your job search pipeline — with real-time stats, bulk actions, undo/redo history, multi-currency salary display, and secure authentication. Free to self-host. I built this app out of my own experiences in job hunting, acknowledging that such tool would be useful to keep track of the roles I applied for and having data like so available meant I could analyse what I could improve in from that.
 
 ---
 
