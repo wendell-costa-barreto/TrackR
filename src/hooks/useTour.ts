@@ -1,36 +1,21 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const TOUR_KEY = "trackr_tour_done";
+let tourInitialized = false;
 
 export function useTour() {
   const [active, setActive] = useState(false);
   const [step, setStep] = useState(0);
-  const hasRun = useRef(false);
 
   useEffect(() => {
-    // Guard against StrictMode double-invoke and SSR
-    if (hasRun.current) return;
-    hasRun.current = true;
+    if (tourInitialized) return;
+    tourInitialized = true;
 
-    let isMounted = true;
-
-    try {
-      if (!localStorage.getItem(TOUR_KEY)) {
-        const t = setTimeout(() => {
-          if (isMounted) setActive(true);
-        }, 600);
-        return () => {
-          isMounted = false;
-          clearTimeout(t);
-        };
-      }
-    } catch {
-      // localStorage unavailable (SSR, private browsing, etc.)
+    const tourDone = localStorage.getItem(TOUR_KEY);
+    if (!tourDone) {
+      const t = setTimeout(() => setActive(true), 600);
+      return () => clearTimeout(t);
     }
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const next = () => setStep((s) => s + 1);
@@ -49,36 +34,6 @@ export function useTour() {
     setStep(0);
     setActive(true);
   };
-
-  useEffect(() => {
-  console.log("effect ran, hasRun:", hasRun.current);
-  if (hasRun.current) return;
-  hasRun.current = true;
-
-  let isMounted = true;
-
-  try {
-    const tourDone = localStorage.getItem(TOUR_KEY);
-    console.log("tourDone value:", tourDone);
-    
-    if (!tourDone) {
-      console.log("starting timeout...");
-      const t = setTimeout(() => {
-        console.log("timeout fired, isMounted:", isMounted);
-        if (isMounted) setActive(true);
-      }, 600);
-      return () => {
-        console.log("cleanup ran");
-        isMounted = false;
-        clearTimeout(t);
-      };
-    }
-  } catch (e) {
-    console.log("localStorage error:", e);
-  }
-
-  return () => { isMounted = false; };
-}, []);
 
   return { active, step, next, prev, finish, restart };
 }
