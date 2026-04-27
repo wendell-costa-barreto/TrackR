@@ -1,17 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const TOUR_KEY = "trackr_tour_done";
 
 export function useTour() {
   const [active, setActive] = useState(false);
   const [step, setStep] = useState(0);
+  const hasRun = useRef(false);
 
   useEffect(() => {
-    if (!localStorage.getItem(TOUR_KEY)) {
-      // Small delay so the dashboard fully renders before the spotlight kicks in
-      const t = setTimeout(() => setActive(true), 600);
-      return () => clearTimeout(t);
+    // Guard against StrictMode double-invoke and SSR
+    if (hasRun.current) return;
+    hasRun.current = true;
+
+    let isMounted = true;
+
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) {
+        const t = setTimeout(() => {
+          if (isMounted) setActive(true);
+        }, 600);
+        return () => {
+          isMounted = false;
+          clearTimeout(t);
+        };
+      }
+    } catch {
+      // localStorage unavailable (SSR, private browsing, etc.)
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const next = () => setStep((s) => s + 1);
@@ -19,7 +38,11 @@ export function useTour() {
 
   const finish = () => {
     setActive(false);
-    localStorage.setItem(TOUR_KEY, "1");
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      // ignore
+    }
   };
 
   const restart = () => {
@@ -28,4 +51,4 @@ export function useTour() {
   };
 
   return { active, step, next, prev, finish, restart };
-}   
+}

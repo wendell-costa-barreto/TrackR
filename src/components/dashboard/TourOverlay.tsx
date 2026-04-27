@@ -92,11 +92,10 @@ export function TourOverlay({ steps, step, onNext, onPrev, onFinish }: Props) {
 
   return (
     <div className="fixed inset-0 z-[9999] pointer-events-none">
-      {/* Dark overlay with SVG cutout */}
       <svg
         className="absolute inset-0 w-full h-full pointer-events-auto"
         style={{ cursor: "default" }}
-        onClick={onFinish} // click outside → skip tour
+        onClick={onFinish}
       >
         <defs>
           <mask id="tour-mask">

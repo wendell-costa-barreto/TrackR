@@ -24,7 +24,6 @@ interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  /** Whether a TOTP / MFA challenge is pending after password sign-in */
   mfaPending: boolean;
   currency: Currency;
 }
@@ -33,16 +32,11 @@ interface AuthActions {
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ mfaRequired: boolean }>;
   signInWithGoogle: () => Promise<void>;
-  /** Submit the 6-digit TOTP code after signIn returns mfaRequired=true */
   verifyTotp: (code: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** Enroll authenticator app — returns the QR URI for display */
   enrollTotp: () => Promise<{ qrUri: string; secret: string }>;
-  /** Confirm enrollment with first code from authenticator app */
   confirmTotpEnrollment: (factorId: string, code: string) => Promise<void>;
-  /** Unenroll (disable) TOTP 2FA */
   unenrollTotp: () => Promise<void>;
-  /** True when the signed-in user has an active TOTP factor */
   hasMfa: boolean;
   setCurrency: (c: Currency) => void;
 }
@@ -111,10 +105,6 @@ export function useAuth(): AuthState & AuthActions {
     if (error) throw error;
   };
 
-  /**
-   * Returns { mfaRequired: true } when the account has TOTP enrolled.
-   * The caller should then prompt for the code and call verifyTotp().
-   */
   const signIn = async (
     email: string,
     password: string
@@ -139,9 +129,6 @@ export function useAuth(): AuthState & AuthActions {
     return { mfaRequired: false };
   };
 
-  /**
-   * Complete the MFA step after signIn returns mfaRequired=true.
-   */
   const verifyTotp = async (code: string) => {
     // 1. Get the active challenge for the first verified TOTP factor
     const { data: factorData, error: listErr } = await supabase.auth.mfa.listFactors();
@@ -190,30 +177,19 @@ const signOut = async () => {
   window.location.replace("/auth");
 };
 
-  // ── MFA enrollment helpers ──────────────────────────────────────────────
-
-  /**
-   * Begin TOTP enrollment. Display the returned QR URI in an <img> tag or
-   * pass it to a QR library. The user scans it with their authenticator app,
-   * then calls confirmTotpEnrollment() with the first code.
-   */
   const enrollTotp = async (): Promise<{ qrUri: string; secret: string }> => {
     const { data, error } = await supabase.auth.mfa.enroll({
       factorType: "totp",
-      issuer: "TrackR",           // shown in the authenticator app
+      issuer: "TrackR",   
       friendlyName: "Authenticator App",
     });
     if (error) throw error;
     return {
-      qrUri: data.totp.qr_code,   // data URI — pass directly to <img src>
-      secret: data.totp.secret,   // show as fallback manual-entry key
+      qrUri: data.totp.qr_code,  
+      secret: data.totp.secret,  
     };
   };
 
-  /**
-   * Confirm the enrollment by verifying the first TOTP code.
-   * factorId comes from the enrollTotp() response (data.id).
-   */
   const confirmTotpEnrollment = async (factorId: string, code: string) => {
     const { data: challengeData, error: challengeErr } =
       await supabase.auth.mfa.challenge({ factorId });
@@ -234,7 +210,7 @@ const signOut = async () => {
     if (listErr) throw listErr;
 
     const factor = factorData?.totp?.find((f) => f.status === "verified");
-    if (!factor) return; // nothing to unenroll
+    if (!factor) return; 
 
     const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
     if (error) throw error;

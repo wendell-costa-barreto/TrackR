@@ -28,7 +28,6 @@ export function ExpandedRow({
   return (
     <div className="border-b border-zinc-800/40 bg-zinc-900/30 overflow-hidden">
       <div className="px-4 md:px-8 py-5 flex flex-col md:flex-row gap-5 md:gap-8 items-start">
-        {/* Status */}
         <div className="flex flex-col gap-2 w-full md:w-auto md:min-w-[160px]">
           <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-wider">
             Status
@@ -60,7 +59,6 @@ export function ExpandedRow({
         <div className="hidden md:block w-px self-stretch bg-zinc-800/60" />
         <div className="md:hidden w-full h-px bg-zinc-800/60" />
 
-        {/* Notes */}
         <div className="flex-1 flex flex-col gap-2 w-full">
           <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-wider">
             Notes
@@ -94,7 +92,6 @@ export function ExpandedRow({
         <div className="hidden md:block w-px self-stretch bg-zinc-800/60" />
         <div className="md:hidden w-full h-px bg-zinc-800/60" />
 
-        {/* Meta + delete */}
         <div className="flex flex-row flex-wrap md:flex-col gap-4 w-full md:w-auto md:min-w-[130px]">
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-wider">

@@ -10,7 +10,6 @@ body{
   padding: 0;
 }
 
-/* Expand row: slides down and fades in */
 @keyframes expand {
   from {
     max-height: 0;
@@ -24,13 +23,11 @@ body{
   }
 }
 
-/* Fade in: simple opacity */
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-/* Scale in: for modals */
 @keyframes scaleIn {
   from {
     opacity: 0;

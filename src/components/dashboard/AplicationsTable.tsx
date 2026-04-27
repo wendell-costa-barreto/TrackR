@@ -57,9 +57,7 @@ export function ApplicationsTable({
 
   return (
     <>
-      {/* Desktop column headers */}
       <div className="hidden md:grid grid-cols-[2rem_2fr_1fr_1fr_1fr_1.5rem] gap-4 px-6 py-3 border-b border-zinc-800/40">
-        {/* Empty header above checkboxes */}
         <span />
         {["Company / Role", "Status", "Salary", "Applied"].map((h) => (
           <span
@@ -84,7 +82,6 @@ export function ApplicationsTable({
 
             return (
               <div key={app.id} className="animate-fade-in">
-                {/* ── Mobile card ── */}
                 <div
                   className={`md:hidden flex items-center gap-3 px-4 py-3 border-b border-zinc-800/30 transition-colors ${
                     isSelected
@@ -94,7 +91,6 @@ export function ApplicationsTable({
                         : ""
                   }`}
                 >
-                  {/* Checkbox */}
                   <input
                     type="checkbox"
                     checked={isSelected}
@@ -103,7 +99,6 @@ export function ApplicationsTable({
                     className="w-4 h-4 rounded accent-white cursor-pointer flex-shrink-0"
                   />
 
-                  {/* Row content — tapping this expands */}
                   <div
                     className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer active:opacity-70"
                     onClick={() => handleRowClick(app.id)}
@@ -139,7 +134,6 @@ export function ApplicationsTable({
                   </div>
                 </div>
 
-                {/* ── Desktop row ── */}
                 <div
                   className={`hidden md:grid grid-cols-[2rem_2fr_1fr_1fr_1fr_1.5rem] gap-4 items-center px-6 py-4 border-b border-zinc-800/30 group transition-all duration-150 ${
                     isSelected
@@ -151,7 +145,6 @@ export function ApplicationsTable({
                           : "bg-zinc-900/10 hover:bg-zinc-900/40"
                   }`}
                 >
-                  {/* Checkbox cell — stopPropagation so it doesn't expand the row */}
                   <div
                     onClick={(e) => e.stopPropagation()}
                     className="flex items-center"
@@ -164,7 +157,6 @@ export function ApplicationsTable({
                     />
                   </div>
 
-                  {/* Company / Role — clicking expands */}
                   <div
                     className="flex items-center gap-3 min-w-0 cursor-pointer"
                     onClick={() => handleRowClick(app.id)}
@@ -180,12 +172,10 @@ export function ApplicationsTable({
                     </div>
                   </div>
 
-                  {/* Status — stopPropagation so badge dropdown doesn't expand row */}
                   <div onClick={(e) => e.stopPropagation()}>
                     <StatusBadge status={app.status} />
                   </div>
 
-                  {/* Salary / Applied — clicking expands */}
                   <span
                     className="text-sm text-zinc-400 font-medium cursor-pointer"
                     onClick={() => handleRowClick(app.id)}
@@ -199,7 +189,6 @@ export function ApplicationsTable({
                     {app.applied}
                   </span>
 
-                  {/* Chevron */}
                   <svg
                     onClick={() => handleRowClick(app.id)}
                     className={`w-3.5 h-3.5 text-zinc-600 cursor-pointer transition-all duration-200 ${

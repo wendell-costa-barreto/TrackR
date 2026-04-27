@@ -48,7 +48,6 @@ export function Sidebar({ applications }: SidebarProps) {
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Header */}
       <div className="px-6 py-5 border-b border-zinc-800/50">
         <h3 className="text-sm font-bold text-white tracking-tight">
           Recent Activity
@@ -56,7 +55,6 @@ export function Sidebar({ applications }: SidebarProps) {
         <p className="text-xs text-zinc-600 mt-0.5">Last 30 days</p>
       </div>
 
-      {/* Feed */}
       <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-5">
         {activity.length === 0 ? (
           <p className="text-xs text-zinc-600">No activity yet.</p>
@@ -81,7 +79,6 @@ export function Sidebar({ applications }: SidebarProps) {
         )}
       </div>
 
-      {/* Pipeline */}
       <div className="px-6 py-5 border-t border-zinc-800/50">
         <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
           Pipeline
