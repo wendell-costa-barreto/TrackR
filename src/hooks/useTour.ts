@@ -50,5 +50,35 @@ export function useTour() {
     setActive(true);
   };
 
+  useEffect(() => {
+  console.log("effect ran, hasRun:", hasRun.current);
+  if (hasRun.current) return;
+  hasRun.current = true;
+
+  let isMounted = true;
+
+  try {
+    const tourDone = localStorage.getItem(TOUR_KEY);
+    console.log("tourDone value:", tourDone);
+    
+    if (!tourDone) {
+      console.log("starting timeout...");
+      const t = setTimeout(() => {
+        console.log("timeout fired, isMounted:", isMounted);
+        if (isMounted) setActive(true);
+      }, 600);
+      return () => {
+        console.log("cleanup ran");
+        isMounted = false;
+        clearTimeout(t);
+      };
+    }
+  } catch (e) {
+    console.log("localStorage error:", e);
+  }
+
+  return () => { isMounted = false; };
+}, []);
+
   return { active, step, next, prev, finish, restart };
 }
