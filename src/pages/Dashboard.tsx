@@ -515,7 +515,7 @@ export default function Dashboard() {
             title={`Currency: ${CURRENCY_META[currency].label}`}
             className="w-8 h-8 flex items-center justify-center rounded-lg border border-zinc-800 text-base hover:border-zinc-700 transition-colors"
           >
-            * {currencyFlag}
+            {currencyFlag}
           </button>
           {/* Undo */}
           <button
@@ -1045,7 +1045,7 @@ export default function Dashboard() {
           onClose={() => setShowAddModal(false)}
         />
       )}
-      *{" "}
+
       {showSettings && user && (
         <SettingsModal
           user={user}
