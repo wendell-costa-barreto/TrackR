@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 const TOUR_KEY = "trackr_tour_done";
+let tourInitialized = false;
 
 export function useTour() {
   const [active, setActive] = useState(false);
@@ -8,24 +9,13 @@ export function useTour() {
   const hasRun = useRef(false);
 
   useEffect(() => {
-    // Guard against StrictMode double-invoke and SSR
-    if (hasRun.current) return;
-    hasRun.current = true;
+    if (tourInitialized) return;
+    tourInitialized = true;
 
-    let isMounted = true;
-
-    try {
-      if (!localStorage.getItem(TOUR_KEY)) {
-        const t = setTimeout(() => {
-          if (isMounted) setActive(true);
-        }, 600);
-        return () => {
-          isMounted = false;
-          clearTimeout(t);
-        };
-      }
-    } catch {
-      // localStorage unavailable (SSR, private browsing, etc.)
+    const tourDone = localStorage.getItem(TOUR_KEY);
+    if (!tourDone) {
+      const t = setTimeout(() => setActive(true), 600);
+      return () => clearTimeout(t);
     }
 
     return () => {
