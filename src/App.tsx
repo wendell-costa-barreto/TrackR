@@ -3,6 +3,7 @@ import { useAuth } from "./hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
 import AuthCallback from "./pages/AuthCallback";
 import Dashboard from "./pages/Dashboard";
+import TrackRLanding from "./pages/HomePage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -23,10 +24,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={<Navigate to={user ? "/dashboard" : "/auth"} replace />}
-      />
+      <Route path="/" element={<TrackRLanding />} />
       <Route
         path="/auth"
         element={user ? <Navigate to="/dashboard" replace /> : <AuthPage />}
@@ -42,7 +40,7 @@ export default function App() {
       />
       <Route
         path="*"
-        element={<Navigate to={user ? "/dashboard" : "/auth"} replace />}
+        element={<Navigate to={user ? "/dashboard" : "/"} replace />}
       />
     </Routes>
   );
