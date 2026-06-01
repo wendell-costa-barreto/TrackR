@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const TOUR_KEY = "trackr_tour_done";
 let tourInitialized = false;
@@ -6,7 +6,6 @@ let tourInitialized = false;
 export function useTour() {
   const [active, setActive] = useState(false);
   const [step, setStep] = useState(0);
-  const hasRun = useRef(false);
 
   useEffect(() => {
     if (tourInitialized) return;
@@ -17,10 +16,6 @@ export function useTour() {
       const t = setTimeout(() => setActive(true), 600);
       return () => clearTimeout(t);
     }
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const next = () => setStep((s) => s + 1);
